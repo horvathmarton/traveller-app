@@ -1,16 +1,16 @@
 <script>
 	import * as THREE from "three";
+	import { OrbitControls } from "./orbit-controls";
+	import { TIMELINE } from './timeline';
 
 	let renderer = new THREE.WebGLRenderer();
 	let scene = new THREE.Scene();
 	let aspect = window.innerWidth / window.innerHeight;
-	let camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1500);
-	let cameraRotation = 0;
-	let cameraRotationSpeed = 0.001;
-	let cameraAutoRotation = true;
+	let camera = new THREE.PerspectiveCamera(35, aspect, 0.1, 1500);
+	let cameraAutoRotation = false;
 
 	// Lights
-	let spotLight = new THREE.SpotLight(0xffffff, 1, 0, 10, 2);
+	const light = new THREE.AmbientLight(0xffffff); // soft white light
 
 	// Planet Proto
 	let planetProto = {
@@ -51,24 +51,24 @@
 					},
 				},
 				vertexShader: `
-        uniform vec3 viewVector;
-        uniform float c;
-        uniform float p;
-        varying float intensity;
-        void main() {
-          vec3 vNormal = normalize( normalMatrix * normal );
-          vec3 vNormel = normalize( normalMatrix * viewVector );
-          intensity = pow( c - dot(vNormal, vNormel), p );
-          gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-        }`,
+					uniform vec3 viewVector;
+					uniform float c;
+					uniform float p;
+					varying float intensity;
+					void main() {
+					vec3 vNormal = normalize( normalMatrix * normal );
+					vec3 vNormel = normalize( normalMatrix * viewVector );
+					intensity = pow( c - dot(vNormal, vNormel), p );
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+					}`,
 				fragmentShader: `
-        uniform vec3 glowColor;
-        varying float intensity;
-        void main() 
-        {
-          vec3 glow = glowColor * intensity;
-          gl_FragColor = vec4( glow, 1.0 );
-        }`,
+					uniform vec3 glowColor;
+					varying float intensity;
+					void main() 
+					{
+					vec3 glow = glowColor * intensity;
+					gl_FragColor = vec4( glow, 1.0 );
+					}`,
 				side: THREE.BackSide,
 				blending: THREE.AdditiveBlending,
 				transparent: true,
@@ -76,17 +76,17 @@
 
 			return glowMaterial;
 		},
-		texture: function (material, property, uri) {
+		texture: (material, property, uri) => {
 			let textureLoader = new THREE.TextureLoader();
 			textureLoader.crossOrigin = true;
-			textureLoader.load(uri, function (texture) {
+			textureLoader.load(uri, (texture) => {
 				material[property] = texture;
 				material.needsUpdate = true;
 			});
 		},
 	};
 
-	function createPlanet (options) {
+	function createPlanet(options) {
 		// Create the planet's Surface
 		let surfaceGeometry = planetProto.sphere(options.surface.size);
 		let surfaceMaterial = planetProto.material(options.surface.material);
@@ -107,7 +107,21 @@
 		}
 
 		return planet;
-	};
+	}
+
+	// Main render function
+	function render() {
+		earth.getObjectByName("surface").rotation.y += (1 / 32) * 0.01;
+		if (cameraAutoRotation) {
+			// cameraRotation += cameraRotationSpeed;
+			// camera.position.y = 0;
+			// camera.position.x = 2 * Math.sin(cameraRotation);
+			// camera.position.z = 2 * Math.cos(cameraRotation);
+			// camera.lookAt(earth.position);
+		}
+		requestAnimationFrame(render);
+		renderer.render(scene, camera);
+	}
 
 	let earth = createPlanet({
 		surface: {
@@ -118,11 +132,7 @@
 				shininess: 10,
 			},
 			textures: {
-				map: "https://s3-us-west-2.amazonaws.com/s.cdpn.io/141228/earthmap1k.jpg",
-				bumpMap:
-					"https://s3-us-west-2.amazonaws.com/s.cdpn.io/141228/earthbump1k.jpg",
-				specularMap:
-					"https://s3-us-west-2.amazonaws.com/s.cdpn.io/141228/earthspec1k.jpg",
+				map: "map.png",
 			},
 		},
 	});
@@ -168,38 +178,6 @@
 		object.add(marker);
 	};
 
-	// Place Marker At Address
-	function placeMarkerAtAddress(address, color) {
-		let encodedLocation = address.replace(/\s/g, "+");
-		let httpRequest = new XMLHttpRequest();
-
-		httpRequest.open(
-			"GET",
-			"https://maps.googleapis.com/maps/api/geocode/json?address=" +
-				encodedLocation
-		);
-		httpRequest.send(null);
-		httpRequest.onreadystatechange = function () {
-			if (httpRequest.readyState == 4 && httpRequest.status == 200) {
-				let result = JSON.parse(httpRequest.responseText);
-
-				if (result.results.length > 0) {
-					let latitude = result.results[0].geometry.location.lat;
-					let longitude = result.results[0].geometry.location.lng;
-
-					placeMarker(earth.getObjectByName("surface"), {
-						latitude: latitude,
-						longitude: longitude,
-						radius: 0.5,
-						height: 0,
-						size: 0.01,
-						color: color,
-					});
-				}
-			}
-		};
-	};
-
 	// Scene, Camera, Renderer Configuration
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	document.body.appendChild(renderer.domElement);
@@ -207,45 +185,45 @@
 	camera.position.set(1, 1, 1);
 
 	scene.add(camera);
-	scene.add(spotLight);
+	scene.add(light);
 	scene.add(earth);
 
+	const orbitControls = new OrbitControls(camera, renderer.domElement);
+
+	orbitControls.enabled = true;
+
 	// Light Configurations
-	spotLight.position.set(2, 0, 1);
+	light.position.set(1, 0, 0);
 
 	// Mesh Configurations
 	earth.receiveShadow = true;
 	earth.castShadow = true;
 	earth.getObjectByName("surface").geometry.center();
 
+	TIMELINE.forEach(position => {
+		const { latitude, longitude } = position;
+
+		placeMarker(earth.getObjectByName("surface"), {
+			latitude,
+			longitude,
+			radius: 0.5,
+			height: 0,
+			size: 0.001,
+			color: 0x0000ff,
+		});
+	})
+
 	// On window resize, adjust camera aspect ratio and renderer size
-	window.addEventListener("resize", function () {
+	window.addEventListener("resize", () => {
 		camera.aspect = window.innerWidth / window.innerHeight;
 		camera.updateProjectionMatrix();
 		renderer.setSize(window.innerWidth, window.innerHeight);
 	});
 
-	// Main render function
-	function render() {
-		earth.getObjectByName("surface").rotation.y += (1 / 32) * 0.01;
-		if (cameraAutoRotation) {
-			cameraRotation += cameraRotationSpeed;
-			camera.position.y = 0;
-			camera.position.x = 2 * Math.sin(cameraRotation);
-			camera.position.z = 2 * Math.cos(cameraRotation);
-			camera.lookAt(earth.position);
-		}
-		requestAnimationFrame(render);
-		renderer.render(scene, camera);
-	};
-
 	render();
 </script>
 
-<main></main>
+<main />
 
 <style>
-	canvas {
-		display: block;
-	}
 </style>

@@ -1,17 +1,17 @@
 <script>
-	import Earth from './Earth.svelte';
+  import Earth from "./Earth.svelte";
 </script>
 
 <main>
-	<Earth />
+  <Earth />
 </main>
 
 <style>
-	body {
-  margin: 0;
-}
-
-canvas {
-  display: block;
-}
+  * {
+	box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+  }
 </style>
